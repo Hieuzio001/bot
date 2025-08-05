@@ -1,70 +1,69 @@
 import discord
 from discord.ext import commands, tasks
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
+import os
+
+TOKEN = os.getenv("TOKEN")  # Token của bạn sẽ cấu hình trong Railway sau
 
 intents = discord.Intents.default()
-intents.members = True
 intents.message_content = True
+intents.guilds = True
+intents.members = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 🛠 CẤU HÌNH
-channel_id = 1395784873708486656  # ID của channel cần giới hạn truy cập
+# Gán thông tin ID
+target_channel_id = 1395784873708486656  # Channel để bật/tắt view
+log_channel_id = 1402130773418442863     # Channel để gửi thông báo
 
-# 📅 Lịch truy cập cho từng người
+# Lịch truy cập của từng user
 user_schedules = {
-    994084789697134592: [  # <@994084789697134592>
-        {"start": time(4, 0), "end": time(7, 0)},
-        {"start": time(15, 0), "end": time(18, 0)}
-    ],
-    1284898656415125586: [  # <@1284898656415125586>
-        {"start": time(11, 0), "end": time(15, 0)},
-        {"start": time(21, 0), "end": time(23, 59, 59)}
-    ],
-    1134008850895343667: [  # <@1134008850895343667>
-        {"start": time(0, 0), "end": time(4, 0)}
-    ],
-    960787999833079881: [  # <@960787999833079881>
-        {"start": time(7, 0), "end": time(11, 0)},
-        {"start": time(18, 0), "end": time(21, 0)}
-    ]
+    994084789697134592: [(4, 7), (15, 18)],
+    1284898656415125586: [(11, 15), (21, 24)],
+    1134008850895343667: [(0, 4)],
+    960787999833079881: [(7, 11), (18, 21)],
 }
 
-# 👉 DÙNG GIỜ VIỆT NAM
-def get_vietnam_time():
-    return (datetime.utcnow() + timedelta(hours=7)).time()
-
-@bot.event
-async def on_ready():
-    print(f"✅ Bot đang hoạt động: {bot.user}")
-    update_permissions.start()
+def is_within_time_range(hour, ranges):
+    return any(start <= hour < end for start, end in ranges)
 
 @tasks.loop(minutes=1)
 async def update_permissions():
-    now = get_vietnam_time()
-    channel = bot.get_channel(channel_id)
+    now = datetime.utcnow() + timedelta(hours=7)
+    hour = now.hour
+    guild = discord.utils.get(bot.guilds)
+    channel = guild.get_channel(target_channel_id)
+    log_channel = guild.get_channel(log_channel_id)
 
-    for user_id, intervals in user_schedules.items():
-        member = channel.guild.get_member(user_id)
-        if not member:
+    for user_id, schedule in user_schedules.items():
+        member = guild.get_member(user_id)
+        if not member or not channel:
             continue
 
-        # Kiểm tra có nằm trong bất kỳ khoảng thời gian nào không
-        allowed = any(interval['start'] <= now <= interval['end'] for interval in intervals)
+        can_view = is_within_time_range(hour, schedule)
+        current_perm = channel.overwrites_for(member)
 
-        if allowed:
-            await channel.set_permissions(member, view_channel=True, send_messages=True)
-        else:
-            await channel.set_permissions(member, overwrite=None)
+        if current_perm.view_channel != can_view:
+            overwrite = discord.PermissionOverwrite()
+            overwrite.view_channel = can_view
+            await channel.set_permissions(member, overwrite=overwrite)
+            if log_channel:
+                status = "✅ **ĐÃ MỞ**" if can_view else "⛔ **ĐÃ ẨN**"
+                await log_channel.send(
+                    f"{status} quyền xem channel cho <@{user_id}> lúc `{now.strftime('%H:%M')}`"
+                )
 
-# 📘 Lệnh xem lịch của tất cả user
 @bot.command()
 async def xemlich(ctx):
-    result = ""
-    for uid, intervals in user_schedules.items():
-        member = ctx.guild.get_member(uid)
-        if member:
-            lich = "\n".join([f"  - {i['start'].strftime('%H:%M')} → {i['end'].strftime('%H:%M')}" for i in intervals])
-            result += f"{member.mention}:\n{lich}\n"
-    await ctx.send("📅 **Lịch truy cập hiện tại:**\n" + result)
+    embed = discord.Embed(title="📅 Lịch Truy Cập", color=0x2ecc71)
+    for uid, schedule in user_schedules.items():
+        ranges = [f"{start}h - {end}h" for start, end in schedule]
+        embed.add_field(name=f"<@{uid}>", value=", ".join(ranges), inline=False)
+    await ctx.send(embed=embed)
 
-bot.run("MTQwMTk0OTQ5MDIzOTI0NjQzNw.GNf6RH.fYZ3M8Bw7q5vTfgp9FL9wL-z_fTYvy87DMVXMA")  # ← Thay bằng Token thực của bạn
+@bot.event
+async def on_ready():
+    print(f"✅ Bot đã online: {bot.user}")
+    update_permissions.start()
+
+bot.run(TOKEN)
