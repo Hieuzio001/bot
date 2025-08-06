@@ -3,8 +3,10 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import os
 
+# Lấy token từ biến môi trường
 TOKEN = os.getenv("TOKEN")
 
+# Khởi tạo bot
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
@@ -12,11 +14,11 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# === Cấu hình channel ===
-target_channel_id = 1395784873708486656  # kênh chính cần chỉnh quyền
-log_channel_id = 1402130773418442863     # kênh log gửi thông báo
+# Cấu hình ID channel
+target_channel_id = 1395784873708486656  # Channel cần set quyền
+log_channel_id = 1402130773418442863     # Channel gửi log
 
-# === Lịch truy cập của từng thành viên ===
+# Lịch từng user
 user_schedules = {
     994084789697134592: [(4, 7), (15, 18)],
     1284898656415125586: [(11, 15), (21, 24)],
@@ -63,7 +65,6 @@ async def xemlich(ctx):
         embed.add_field(name=f"<@{uid}>", value=", ".join(ranges), inline=False)
     await ctx.send(embed=embed)
 
-# 🔴 Lệnh tắt quyền xem
 @bot.command()
 async def tatauto(ctx):
     guild = ctx.guild
@@ -84,7 +85,6 @@ async def tatauto(ctx):
 
     await ctx.send("✅ Đã tắt quyền xem channel cho AutoJoiner.")
 
-# 🟢 Lệnh bật lại quyền xem
 @bot.command()
 async def batauto(ctx):
     guild = ctx.guild
